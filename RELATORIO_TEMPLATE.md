@@ -46,19 +46,27 @@ strace -e openat,read,close ./ex2_leitura
 **1. Qual file descriptor foi usado? Por que não começou em 0, 1 ou 2?**
 
 ```
-[Sua análise aqui]
+O file descriptor usado foi o 3 porque no Linux os descriptors 0, 1 e 2 já estão reservados para entrada padrão (stdin) [0], saída padrão (stdout) [1], erro padrão (stderr) [2]. Então o primeiro descriptor livre para arquivos abertos pelo programa é o 3.
 ```
 
 **2. Como você sabe que o arquivo foi lido completamente?**
 
 ```
-[Sua análise aqui]
+O arquivo teste1.txt possui 124 bytes e o programa utiliza um buffer de 128 bytes, mas ele lê no máximo 127 bytes reservando 1 byte para o \0.
+
+Como o tamanho do arquivo é menor que a capacidade do buffer, todos os bytes foram lidos de uma vez garantindo que o arquivo inteiro foi carregado na memória.
 ```
 
-**3. Por que verificar retorno de cada syscall?**
+**3. O que acontece se esquecer de fechar o arquivo?**
 
 ```
-[Sua análise aqui]
+Se close(fd) não for chamado o Linux fecha automaticamente os descriptors ao final da execução do programa.
+``
+
+**4. Por que verificar retorno de cada syscall?**
+
+```
+Porque verificar o retorno de cada syscall permite que o programa identifique erros se houver algum.
 ```
 
 ---
@@ -75,29 +83,35 @@ strace -e openat,read,close ./ex2_leitura
 
 | Buffer Size | Chamadas read() | Tempo (s) |
 |-------------|-----------------|-----------|
-| 16          |                 |           |
-| 64          |                 |           |
-| 256         |                 |           |
-| 1024        |                 |           |
+| 16          |       84        |  0.000000 |
+| 64          |       23        |  0.000000 |
+| 256         |        8        |  0.000000 |
+| 1024        |        4        |  0.000000 |
 
 ### 🔍 Análise
 
 **1. Como o tamanho do buffer afeta o número de syscalls?**
 
 ```
-[Sua análise aqui]
+O tamanho do buffer afeta diretamente o número de chamadas read() necessárias para ler um arquivo. Buffers maiores permitem que o programa leia uma quantidade maior de dados em cada chamada diminuindo o número total de syscalls. Por outro lado, buffers menores limitam a quantidade de dados lidos a cada chamada aumentando significativamente o número de chamadas necessárias.
+
+Exemplo: Com buffer de 16 bytes foram feitas 84 chamadas read(), com 64 bytes foram 23 chamadas, com 256 bytes apenas 8 chamadas e com 1024 bytes apenas 4 chamadas. Portanto, quanto maior o buffer, menor a sobrecarga causada pelas syscalls.
 ```
 
 **2. Todas as chamadas read() retornaram BUFFER_SIZE bytes? Discorra brevemente sobre**
 
 ```
-[Sua análise aqui]
+Não, nem todas as chamadas read() retornaram exatamente o tamanho do buffer solicitado. 
+
+- No log do programa com buffer de 1024 bytes a primeira leitura retornou 1024 bytes preenchendo completamente o buffer.
+- A segunda leitura retornou apenas 276 bytes porque eram os últimos bytes restantes do arquivo de 1300 bytes.
+- A terceira leitura retornou 0 bytes indicando o fim do arquivo (EOF)
 ```
 
 **3. Qual é a relação entre syscalls e performance?**
 
 ```
-[Sua análise aqui]
+A relação entre syscalls e performance é que o número de syscalls impacta diretamente a performance do programa, pois cada chamada read() envolve uma transição entre o espaço do usuário e o kernel que é relativamente custosa. Quanto maior o número de chamadas, maior será a sobrecarga do sistema podendo reduzir a eficiência da leitura. Por isso, utilizar buffers maiores diminui o número de syscalls, reduz a sobrecarga e melhora a performance.
 ```
 
 ---
@@ -105,10 +119,10 @@ strace -e openat,read,close ./ex2_leitura
 ## 4️⃣ Exercício 4 - Cópia de Arquivo
 
 ### 📈 Resultados:
-- Bytes copiados: _____
-- Operações: _____
-- Tempo: _____ segundos
-- Throughput: _____ KB/s
+- Bytes copiados: 1364
+- Operações: 22
+- Tempo: 0.000000 segundos
+- Throughput: (1364 / 1024) / 0.014 = 95 KB/s
 
 ### ✅ Verificação:
 ```bash
@@ -121,31 +135,35 @@ Resultado: [ ] Idênticos [ ] Diferentes
 **1. Por que devemos verificar que bytes_escritos == bytes_lidos?**
 
 ```
-[Sua análise aqui]
+Porque o write() pode escrever menos bytes do que o read() retornou, por motivos como buffers cheios ou erros de E/S. Essa verificação garante que todos os dados lidos realmente foram gravados no destino.
 ```
 
 **2. Que flags são essenciais no open() do destino?**
 
 ```
-[Sua análise aqui]
+O_WRONLY - abrir para escrita.
+O_CREAT - criar o arquivo caso não exista.
+O_TRUNC - limpar o conteúdo do arquivo se já existir.
 ```
 
 **3. O número de reads e writes é igual? Por quê?**
 
 ```
-[Sua análise aqui]
+Sim, porque cada chamada read() que retorna dados válidos é seguida por um write() com exatamente o mesmo conteúdo.
 ```
 
 **4. Como você saberia se o disco ficou cheio?**
 
 ```
-[Sua análise aqui]
+Eu saberia se o disco ficou cheio caso o write() retornasse um valor menor que bytes_lidos (ou -1 com ENOSPC) indicando que não foi possível gravar todos os bytes porque o espaço em disco acabou.
 ```
 
 **5. O que acontece se esquecer de fechar os arquivos?**
 
 ```
-[Sua análise aqui]
+Se esquecer de fechar os arquivos, os file descriptors ficam presos até o programa terminar, podendo causar vazamentos de descriptors se vários arquivos forem abertos.
+
+No caso de arquivos gravados pode haver dados não "flushados" (sem sincronizar no disco).
 ```
 
 ---
@@ -157,19 +175,19 @@ Resultado: [ ] Idênticos [ ] Diferentes
 **1. Como as syscalls demonstram a transição usuário → kernel?**
 
 ```
-[Sua análise aqui]
+As syscalls (open, read, write, close) são chamadas feitas pelo programa em modo usuário para solicitar serviços do kernel. O strace mostra essa transição: cada vez que o programa precisa de acesso ao disco ele pede ao kernel via syscall, pois o usuário não tem acesso direto ao hardware.
 ```
 
 **2. Qual é o seu entendimento sobre a importância dos file descriptors?**
 
 ```
-[Sua análise aqui]
+Segundo o meu entendimento, os file descriptors são importantes porque funcionam como identificadores inteiros que o kernel usa para controlar arquivos abertos e direcionar as operações de leitura e escrita.
 ```
 
 **3. Discorra sobre a relação entre o tamanho do buffer e performance:**
 
 ```
-[Sua análise aqui]
+A relação entre o tamanho do buffer e a performance é que buffers maiores reduzem a quantidade de chamadas read() e write() diminuindo o custo das transições para o kernel e aumentando a eficiência da cópia de dados.
 ```
 
 ### ⚡ Comparação de Performance
@@ -185,7 +203,7 @@ time cp dados/origem.txt dados/destino_cp.txt
 **Por que você acha que foi mais rápido?**
 
 ```
-[Sua análise aqui]
+O ./ex4_copia foi mais rápido porque é um executável compilado que realiza apenas a cópia do arquivo de forma direta, lendo e escrevendo bytes sem verificações adicionais; Já o comando cp, mesmo copiando apenas dois arquivos .txt precisa lidar com verificações de permissões, links simbólicos, diretórios e manter compatibilidade com várias opções, o que adiciona sobrecarga. Por isso, para uma cópia simples o programa compilado é mais eficiente que o cp.
 ```
 
 ---

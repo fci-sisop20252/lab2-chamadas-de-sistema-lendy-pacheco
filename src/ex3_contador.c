@@ -40,7 +40,7 @@ int main() {
      * TODO 1: Implementar loop de leitura
      * Loop até read() retornar 0 (fim do arquivo)
      */
-    while (/* TODO: condição do loop */) {
+    while ((bytes_lidos = read(fd, buffer, BUFFER_SIZE)) > 0) {
         total_reads++;
         
         /*
@@ -48,6 +48,9 @@ int main() {
          */
         for (int i = 0; i < bytes_lidos; i++) {
             /* TODO: verificar '\n' e incrementar total_linhas */
+            if (buffer[i] == '\n') {
+                total_linhas++;
+            }
         }
         
         /*
@@ -63,7 +66,7 @@ int main() {
     /*
      * TODO 4: Verificar se houve erro na leitura
      */
-    if (/* TODO: condição de erro */) {
+    if (bytes_lidos < 0) {
         perror("Erro na leitura");
         close(fd);
         return 1;
